@@ -478,7 +478,10 @@ class Attention(nn.Module):
             # Applies a rotation to each two-element chunk of keys and queries pre dot producting to bake in relative position. See HookedTransformerConfig for details
             self.hook_rot_k = HookPoint()
             self.hook_rot_q = HookPoint()
-            sin, cos = self.calculate_sin_cos_rotary(
+            # sin, cos = self.calculate_sin_cos_rotary(
+            #     self.cfg.rotary_dim, self.cfg.n_ctx, dtype=self.cfg.dtype
+            # )
+            sin, cos = self.calculate_sin_cos_rotary_hf(
                 self.cfg.rotary_dim, self.cfg.n_ctx, dtype=self.cfg.dtype
             )
             self.register_buffer("rotary_sin", sin)
@@ -580,10 +583,12 @@ class Attention(nn.Module):
 
         if self.cfg.positional_embedding_type == "rotary":
             q = self.hook_rot_q(
-                self.apply_rotary(q, kv_cache_pos_offset, attention_mask)
+                self.apply_rotary_hf(q, kv_cache_pos_offset, attention_mask)
+                # self.apply_rotary(q, kv_cache_pos_offset, attention_mask)
             )
             k = self.hook_rot_k(
-                self.apply_rotary(k, 0, attention_mask)
+                self.apply_rotary_hf(k, 0, attention_mask)
+                # self.apply_rotary(k, 0, attention_mask)
             )  # keys are cached so no offset
 
         if self.cfg.dtype not in [torch.float32, torch.float64]:
@@ -700,6 +705,69 @@ class Attention(nn.Module):
             final_mask = einops.einsum(final_mask, attention_mask, einsum_str).bool()
 
         return torch.where(final_mask, attn_scores, self.IGNORE)
+
+    def calculate_sin_cos_rotary_hf(
+        self,
+        rotary_dim: int,
+        n_ctx: int,
+        base: int = 10000,
+        dtype: torch.dtype = torch.float32,
+    ) -> Tuple[
+        Float[torch.Tensor, "n_ctx rotary_dim"], Float[torch.Tensor, "n_ctx rotary_dim"]
+    ]:
+
+        inv_freq = 1.0 / (base ** (torch.arange(0, rotary_dim, 2).float().to(self.cfg.device) /rotary_dim))
+
+        t = torch.arange(n_ctx, device=self.cfg.device, dtype=inv_freq.dtype)
+
+        freqs = torch.outer(t, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+
+        return emb.sin().to(dtype), emb.cos().to(dtype)
+
+    def rotate_half_hf(self, x):
+        """Rotates half the hidden dims of the input."""
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def apply_rotary_hf(
+        self,
+        x: Float[torch.Tensor, "batch pos head_index d_head"],
+        past_kv_pos_offset=0,
+        attention_mask: Optional[Int[torch.Tensor, "batch offset_pos"]] = None,
+    ) -> Float[torch.Tensor, "batch pos head_index d_head"]:
+        cos = self.rotary_cos[:x.shape[1]].unsqueeze(1)
+        sin = self.rotary_sin[:x.shape[1]].unsqueeze(1)
+        x_embed = (x * cos) + (self.rotate_half_hf(x) * sin)
+        return x_embed
+
+    def apply_rotary_pos_emb_hf(self, q, k, cos, sin, position_ids, unsqueeze_dim=1):
+        """Applies Rotary Position Embedding to the query and key tensors.
+
+        Args:
+            q (`torch.Tensor`): The query tensor.
+            k (`torch.Tensor`): The key tensor.
+            cos (`torch.Tensor`): The cosine part of the rotary embedding.
+            sin (`torch.Tensor`): The sine part of the rotary embedding.
+            position_ids (`torch.Tensor`):
+                The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+                used to pass offsetted position ids when working with a KV-cache.
+            unsqueeze_dim (`int`, *optional*, defaults to 1):
+                The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+                sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+                that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+                k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+                cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+                the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+        Returns:
+            `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+        """
+        cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+        sin = sin[position_ids].unsqueeze(unsqueeze_dim)
+        q_embed = (q * cos) + (self.rotate_half_hf(q) * sin)
+        k_embed = (k * cos) + (self.rotate_half_hf(k) * sin)
+        return q_embed, k_embed
 
     def calculate_sin_cos_rotary(
         self,
