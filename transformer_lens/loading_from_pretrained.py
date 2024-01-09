@@ -138,6 +138,8 @@ OFFICIAL_MODEL_NAMES = [
     "stabilityai/stablelm-tuned-alpha-7b",
     "bigscience/bloom-560m",
     "bigcode/santacoder",
+    "01-ai/Yi-6B",
+    "01-ai/Yi-6B-Chat",
 ]
 """Official model names for models on HuggingFace."""
 
@@ -623,6 +625,25 @@ def convert_hf_model_config(model_name: str, **kwargs):
             "final_rms": True,
             "gated_mlp": True,
         }
+    elif architecture == "LlamaForCausalLM":
+        cfg_dict = {
+            "d_model": hf_config.hidden_size,
+            "d_head": hf_config.hidden_size // hf_config.num_attention_heads,
+            "n_heads": hf_config.num_attention_heads,
+            "d_mlp": hf_config.intermediate_size,
+            "n_layers": hf_config.num_hidden_layers,
+            "n_ctx": hf_config.max_position_embeddings, #?? TODO: check this
+            "eps": hf_config.rms_norm_eps,
+            "d_vocab": hf_config.vocab_size,
+            "act_fn": hf_config.hidden_act,
+            "normalization_type": "RMS",
+            "positional_embedding_type": "rotary",
+            "rotary_dim": 4096 // 32, # ?? TODO: check this
+            "final_rms": True,
+            "gated_mlp": True,
+        }
+        print("CFG_DICT")
+        print(cfg_dict)
     elif architecture == "GPTNeoForCausalLM":
         cfg_dict = {
             "d_model": hf_config.hidden_size,
