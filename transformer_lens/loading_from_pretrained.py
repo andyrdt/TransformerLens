@@ -193,6 +193,8 @@ OFFICIAL_MODEL_NAMES = [
     "google-t5/t5-base",
     "google-t5/t5-large",
     "ai-forever/mGPT",
+    "HuggingFaceH4/zephyr-7b-beta",
+    "cais/Zephyr_RMU",
 ]
 """Official model names for models on HuggingFace."""
 
