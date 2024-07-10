@@ -839,7 +839,7 @@ def convert_hf_model_config(model_name: str, **kwargs):
             "final_rms": True,
             "gated_mlp": True,
         }
-    elif "Meta-Llama-3-8B" in official_model_name:
+    elif "Meta-Llama-3-8B" in official_model_name or "llama-3-8b-cb":
         cfg_dict = {
             "d_model": 4096,
             "d_head": 128,
