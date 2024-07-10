@@ -218,6 +218,7 @@ OFFICIAL_MODEL_NAMES = [
     "google-t5/t5-base",
     "google-t5/t5-large",
     "ai-forever/mGPT",
+    "redwoodresearch/llama-3-8b-cb",
 ]
 """Official model names for models on HuggingFace."""
 
