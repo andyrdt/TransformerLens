@@ -219,6 +219,7 @@ OFFICIAL_MODEL_NAMES = [
     "google-t5/t5-large",
     "ai-forever/mGPT",
     "redwoodresearch/llama-3-8b-cb",
+    "GraySwanAI/Llama-3-8B-Instruct-RR",
 ]
 """Official model names for models on HuggingFace."""
 
@@ -839,7 +840,7 @@ def convert_hf_model_config(model_name: str, **kwargs):
             "final_rms": True,
             "gated_mlp": True,
         }
-    elif "Meta-Llama-3-8B" in official_model_name or "llama-3-8b-cb" in official_model_name:
+    elif "Meta-Llama-3-8B" in official_model_name or "llama-3-8b-cb" in official_model_name or "Llama-3-8B-Instruct-RR" in official_model_name:
         cfg_dict = {
             "d_model": 4096,
             "d_head": 128,
